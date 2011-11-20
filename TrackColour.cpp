@@ -7,7 +7,7 @@
 
 using namespace std;
 
-IplImage* GetThresholdedImage(IplImage* img)
+IplImage* GetThresholdedImage(IplImage* img, CvScalar hsv_min, CvScalar hsv_max)
 {
   // Convert the image into an HSV image
   IplImage* imgHSV = cvCreateImage(cvGetSize(img), 8, 3);
@@ -29,7 +29,7 @@ IplImage* GetThresholdedImage(IplImage* img)
  * 
  */
 //   Values 20,100,100 to 30,255,255 working for yellow
-  cvInRangeS(imgHSV, cvScalar(10, 124, 140), cvScalar(20, 140, 146), imgThreshed);
+  cvInRangeS(imgHSV, hsv_min, hsv_max, imgThreshed);
 //   cvInRangeS(imgHSV, cvScalar(0, 30, 80), cvScalar(20, 150, 255), imgThreshed);		//Tracking hand
 //   cvInRangeS(imgHSV, cvScalar(20, 100, 100), cvScalar(30, 255, 255), imgThreshed);	//Tracking PP ball
 
@@ -37,6 +37,7 @@ IplImage* GetThresholdedImage(IplImage* img)
 
   return imgThreshed;
 }
+
 
 int main()
 {
@@ -73,6 +74,43 @@ int main()
   else if(choice == 2)
     cout<<"Starting keyboard control"<<endl;
   
+  //The calibration code goes here.
+    cvNamedWindow("video");
+    IplImage* frame = 0;
+    while(true)
+    {
+      frame = cvQueryFrame(capture);
+      cvRectangle(frame, cvPoint(300, 220), cvPoint(340, 260), cvScalar(0, 255, 255));\
+      cvShowImage("video", frame);
+      int input = cvWaitKey(1);
+      if(input == ' ')
+	break;
+    }
+    
+    //Now we got the frame with the object to be tracked in the rectangle. We need to get the HSV value range for the object.
+    cvSetImageROI(frame, cvRect(300, 220, 40, 40));
+    
+    IplImage *sub_img = cvCreateImageHeader(cvSize( 40, 40 ), frame->depth, frame->nChannels);
+    sub_img->origin = frame->origin;
+    sub_img->widthStep = frame->widthStep;
+    sub_img->imageData = frame->imageData +
+    220 * frame->widthStep +
+    300 * frame->nChannels;
+    
+    CvScalar hsv_avg, hsv_sdv;
+    cvAvgSdv(sub_img, &hsv_avg, &hsv_sdv, 0);
+    double avg_val[4], sdv_val[4];
+    for(int i = 0; i < 4; i++)
+    {
+      avg_val[i] = hsv_avg.val[i];
+      sdv_val[i] = hsv_sdv.val[i];
+    }
+    CvScalar hsv_min = cvScalar( avg_val[0] - hsv_sdv.val[0], avg_val[1] - hsv_sdv.val[1] -25, avg_val[2] - hsv_sdv.val[2] - 25, avg_val[3] - hsv_sdv.val[3]);
+    CvScalar hsv_max = cvScalar( avg_val[0] + hsv_sdv.val[0], avg_val[1] + hsv_sdv.val[1] - 25, avg_val[2] + hsv_sdv.val[2] - 25, avg_val[3] + hsv_sdv.val[3]);
+    cvResetImageROI(frame);
+    
+    cout<<"HSV MIN: "<<hsv_min.val[0]<<" "<<hsv_min.val[1]<<" "<<hsv_min.val[2]<<" "<<hsv_min.val[3]<<endl;
+    cout<<"HSV MAX: "<<hsv_max.val[0]<<" "<<hsv_max.val[1]<<" "<<hsv_max.val[2]<<" "<<hsv_max.val[3]<<endl;
   
 //   cvNamedWindow("video");
 //   cvNamedWindow("thresh");
@@ -82,7 +120,7 @@ int main()
   
   while(true)
   {
-    IplImage* frame = 0;
+//     IplImage* frame = 0;
     frame = cvQueryFrame(capture);
     framecount++;
 
@@ -91,7 +129,7 @@ int main()
     
 
     // Holds the thresholded image (red = white, rest = black)
-    IplImage* imgThresh = GetThresholdedImage(frame);
+    IplImage* imgThresh = GetThresholdedImage(frame, hsv_min, hsv_max);
 
     // Calculate the moments to estimate the position of the ball
     CvMoments *moments = (CvMoments*)malloc(sizeof(CvMoments));
@@ -197,8 +235,8 @@ int main()
 
     cvRectangle(frame, cvPoint(posX + 10, posY - 10), cvPoint(posX - 10, posY + 10), cvScalar(0, 255, 255));
 //     cvAdd(frame, imgScribble, frame);
-//     cvShowImage("thresh", imgThresh);
-//     cvShowImage("video", frame);
+    cvShowImage("thresh", imgThresh);
+    cvShowImage("video", frame);
 
     int c = cvWaitKey(10);
 //     cout<<c<<endl;
